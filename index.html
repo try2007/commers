@@ -6,12 +6,22 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
   body { font-family: system-ui, sans-serif; background: #0f1218; color: #e6e9ef; margin: 0; padding: 20px; }
-  h1 { text-align: center; font-size: 22px; }
+  h1 { text-align: center; font-size: 22px; font-weight: 700; }
   .status { text-align: center; color: #94a3b8; margin: 10px 0; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .card { background: #161b22; border: 1px solid #222; border-radius: 10px; padding: 12px; }
-  .card h3 { margin: 0 0 8px; font-size: 14px; font-weight: 500; }
-  canvas { width: 100% !important; height: 220px !important; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 500; text-align: center; color: #94a3b8; }
+  /* Стиль для последней цены — как у главного заголовка */
+  .last-price {
+    text-align: center;
+    font-family: system-ui, sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #e6e9ef;
+    margin: 0 0 8px;
+    line-height: 1.2;
+  }
+  canvas { width: 100% !important; height: 200px !important; }
 </style>
 </head>
 <body>
@@ -21,7 +31,10 @@
 
 <script>
 fetch("metals_data.json")
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (!r.ok) throw new Error("Файл не найден (HTTP " + r.status + ")");
+    return r.json();
+  })
   .then(function(data) {
     document.getElementById("status").textContent = "Данные загружены";
     var grid = document.getElementById("grid");
@@ -30,15 +43,13 @@ fetch("metals_data.json")
     for (var name in data.metals) {
       var values = data.metals[name];
 
-      var card = document.createElement("div");
-      card.className = "card";
-      var h = document.createElement("h3");
-      h.textContent = name + " — ₽/грамм";
-      card.appendChild(h);
-      var canvas = document.createElement("canvas");
-      card.appendChild(canvas);
-      grid.appendChild(card);
+      // Находим последнее не-null значение
+      var lastValue = null;
+      for (var i = values.length - 1; i >= 0; i--) {
+        if (values[i] !== null) { lastValue = values[i]; break; }
+      }
 
+      // Определяем делитель и суффикс для отображения последней цены
       var validValues = values.filter(function(v) { return v !== null; });
       var maxVal = Math.max.apply(null, validValues);
       var divisor = 1, suffix = "";
@@ -46,6 +57,33 @@ fetch("metals_data.json")
         divisor = 1000;
         suffix = " тыс";
       }
+
+      // Форматируем последнюю цену так же, как на оси Y
+      var lastText = "—";
+      if (lastValue !== null) {
+        var shown = lastValue / divisor;
+        lastText = shown.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + suffix + " ₽/г";
+      }
+
+      // Карточка
+      var card = document.createElement("div");
+      card.className = "card";
+
+      // Название металла (мелкое, сверху)
+      var h = document.createElement("h3");
+      h.textContent = name;
+      card.appendChild(h);
+
+      // Последняя цена (крупно, как заголовок)
+      var price = document.createElement("div");
+      price.className = "last-price";
+      price.textContent = lastText;
+      card.appendChild(price);
+
+      // Канвас
+      var canvas = document.createElement("canvas");
+      card.appendChild(canvas);
+      grid.appendChild(card);
 
       new Chart(canvas, {
         type: "line",
