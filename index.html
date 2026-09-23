@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Цены на металлы, ₽/грамм</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f1218; color: #e6e9ef; margin: 0; padding: 20px; }
+  h1 { text-align: center; font-size: 22px; }
+  .status { text-align: center; color: #94a3b8; margin: 10px 0; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .card { background: #161b22; border: 1px solid #222; border-radius: 10px; padding: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 14px; font-weight: 500; }
+  canvas { width: 100% !important; height: 220px !important; }
+</style>
+</head>
+<body>
+<h1>Цены на металлы, ₽ за грамм (с 01.01.2022)</h1>
+<div class="status" id="status">Загрузка данных...</div>
+<div class="grid" id="grid"></div>
+
+<script>
+fetch("metals_data.json")
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    document.getElementById("status").textContent = "Данные загружены";
+    var grid = document.getElementById("grid");
+    var labels = data.labels;
+
+    for (var name in data.metals) {
+      var values = data.metals[name];
+
+      var card = document.createElement("div");
+      card.className = "card";
+      var h = document.createElement("h3");
+      h.textContent = name + " — ₽/грамм";
+      card.appendChild(h);
+      var canvas = document.createElement("canvas");
+      card.appendChild(canvas);
+      grid.appendChild(card);
+
+      var validValues = values.filter(function(v) { return v !== null; });
+      var maxVal = Math.max.apply(null, validValues);
+      var divisor = 1, suffix = "";
+      if (name !== "Алюминий" && maxVal >= 1000) {
+        divisor = 1000;
+        suffix = " тыс";
+      }
+
+      new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: name,
+            data: values,
+            borderColor: "#60a5fa",
+            backgroundColor: "rgba(96,165,250,0.1)",
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.1,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              ticks: { color: "#94a3b8", maxTicksLimit: 6, font: { size: 10 } },
+              grid: { color: "#222" }
+            },
+            y: {
+              ticks: {
+                color: "#94a3b8",
+                font: { size: 10 },
+                callback: function(v) {
+                  return (v / divisor).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + suffix;
+                }
+              },
+              grid: { color: "#222" }
+            }
+          }
+        }
+      });
+    }
+  })
+  .catch(function(e) {
+    document.getElementById("status").textContent = "Ошибка загрузки данных: " + e.message;
+  });
+</script>
+</body>
+</html>
