@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Биржа металлов</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #0f1218; color: #e6e9ef; margin: 0; padding: 20px; }
+
+  /* --- Экран входа --- */
+  #authScreen { min-height: 90vh; display: flex; align-items: center; justify-content: center; }
+  .auth-card { background: #161b22; border: 1px solid #222; border-radius: 12px; padding: 28px; width: 100%; max-width: 380px; }
+  .auth-card h1 { text-align: center; font-size: 22px; margin: 0 0 20px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #1a1f28; color: #94a3b8; cursor: pointer; font-size: 14px; }
+  .tabs button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .auth-card input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #333; background: #1a1f28; color: #e6e9ef; font-size: 14px; }
+  .auth-card button[type="submit"] { width: 100%; padding: 10px; border-radius: 6px; border: none; background: #2563eb; color: #fff; font-size: 14px; cursor: pointer; margin-top: 6px; }
+  .auth-card button[type="submit"]:hover { background: #1d4ed8; }
+  .auth-msg { text-align: center; margin-top: 12px; font-size: 13px; min-height: 18px; }
+  .auth-msg.ok { color: #4ade80; }
+  .auth-msg.err { color: #f87171; }
+
+  /* --- Приложение --- */
+  #app { display: none; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid #222; padding-bottom: 12px; }
+  header h1 { font-size: 22px; margin: 0; }
+  .user-bar { display: flex; align-items: center; gap: 16px; font-size: 14px; }
+  .balance { background: #1a1f28; padding: 6px 12px; border-radius: 6px; border: 1px solid #333; }
+  .balance b { color: #4ade80; }
+  .user-bar button { padding: 6px 12px; border-radius: 6px; border: 1px solid #333; background: #1a1f28; color: #e6e9ef; cursor: pointer; font-size: 13px; }
+
+  .status { text-align: center; color: #94a3b8; margin: 10px 0; min-height: 18px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 700px)  { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: #161b22; border: 1px solid #222; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 500; text-align: center; color: #94a3b8; }
+  .last-price { text-align: center; font-size: 22px; font-weight: 700; color: #e6e9ef; margin: 0 0 8px; }
+  canvas { width: 100% !important; height: 150px !important; }
+
+  .trade-block { margin-top: 10px; border-top: 1px solid #222; padding-top: 10px; }
+  .holding { font-size: 12px; color: #94a3b8; text-align: center; margin-bottom: 6px; }
+  .holding b { color: #60a5fa; }
+  .trade-row { display: flex; gap: 6px; }
+  .trade-row input { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 6px; border: 1px solid #333; background: #1a1f28; color: #e6e9ef; font-size: 13px; }
+  .trade-row button { padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .btn-buy { background: #16a34a; color: #fff; }
+  .btn-buy:hover { background: #15803d; }
+  .btn-sell { background: #dc2626; color: #fff; }
+  .btn-sell:hover { background: #b91c1c; }
+
+  .panel { margin-top: 20px; background: #161b22; border: 1px solid #222; border-radius: 10px; padding: 16px; }
+  .panel h2 { margin: 0 0 12px; font-size: 16px; }
+  .portfolio-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .portfolio-table th, .portfolio-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #222; }
+  .portfolio-table th { color: #94a3b8; font-weight: 500; }
+  .history { max-height: 260px; overflow-y: auto; font-size: 13px; }
+  .history-item { padding: 6px 0; border-bottom: 1px solid #1a1f28; display: flex; justify-content: space-between; }
+  .history-item .op { font-weight: 600; }
+  .history-item .op.buy { color: #4ade80; }
+  .history-item .op.sell { color: #f87171; }
+  .history-item .meta { color: #94a3b8; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ЭКРАН ВХОДА -->
+<div id="authScreen">
+  <div class="auth-card">
+    <h1>🏦 Биржа металлов</h1>
+    <div class="tabs">
+      <button id="tabLogin" class="active">Вход</button>
+      <button id="tabRegister">Регистрация</button>
+    </div>
+    <form id="loginForm">
+      <input type="text" id="loginUser" placeholder="Логин" required>
+      <input type="password" id="loginPass" placeholder="Пароль" required>
+      <button type="submit">Войти</button>
+    </form>
+    <form id="registerForm" style="display:none">
+      <input type="text" id="regUser" placeholder="Логин" required>
+      <input type="password" id="regPass" placeholder="Пароль (мин. 4 символа)" required>
+      <button type="submit">Зарегистрироваться (стартовый капитал 10 000 ₽)</button>
+    </form>
+    <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- ПРИЛОЖЕНИЕ -->
+<div id="app">
+  <header>
+    <h1>🏦 Биржа металлов</h1>
+    <div class="user-bar">
+      <span>👤 <b id="userName"></b></span>
+      <span class="balance">Баланс: <b id="balanceVal">0</b> ₽</span>
+      <button id="logoutBtn">Выйти</button>
+    </div>
+  </header>
+
+  <div class="status" id="status">Загрузка данных...</div>
+  <div class="grid" id="grid"></div>
+
+  <div class="panel">
+    <h2>💼 Портфель</h2>
+    <div id="portfolio"></div>
+  </div>
+
+  <div class="panel">
+    <h2>📜 История сделок</h2>
+    <div class="history" id="history"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   1. АВТОРИЗАЦИЯ И ХРАНИЛИЩЕ (localStorage)
+   ============================================================ */
+
+var START_BALANCE = 10000;
+
+function getUsers() {
+  try { return JSON.parse(localStorage.getItem("ex_users") || "{}"); }
+  catch (e) { return {}; }
+}
+function saveUsers(u) { localStorage.setItem("ex_users", JSON.stringify(u)); }
+
+function hashPassword(pwd) {
+  var h = 0;
+  for (var i = 0; i < pwd.length; i++) { h = ((h << 5) - h) + pwd.charCodeAt(i); h |= 0; }
+  return "h" + h;
+}
+
+function currentUser() { return localStorage.getItem("ex_current"); }
+function getUserData() {
+  var u = currentUser();
+  if (!u) return null;
+  var users = getUsers();
+  return users[u] || null;
+}
+function saveUserData(data) {
+  var u = currentUser();
+  if (!u) return;
+  var users = getUsers();
+  users[u] = data;
+  saveUsers(users);
+}
+
+function showMessage(text, type) {
+  var el = document.getElementById("authMsg");
+  el.textContent = text;
+  el.className = "auth-msg " + (type || "");
+}
+
+// Переключение вкладок
+document.getElementById("tabLogin").addEventListener("click", function() {
+  this.classList.add("active");
+  document.getElementById("tabRegister").classList.remove("active");
+  document.getElementById("loginForm").style.display = "block";
+  document.getElementById("registerForm").style.display = "none";
+  showMessage("");
+});
+document.getElementById("tabRegister").addEventListener("click", function() {
+  this.classList.add("active");
+  document.getElementById("tabLogin").classList.remove("active");
+  document.getElementById("registerForm").style.display = "block";
+  document.getElementById("loginForm").style.display = "none";
+  showMessage("");
+});
+
+// Регистрация
+document.getElementById("registerForm").addEventListener("submit", function(e) {
+  e.preventDefault();
+  var login = document.getElementById("regUser").value.trim();
+  var pass  = document.getElementById("regPass").value;
+
+  if (login.length < 3) return showMessage("Логин минимум 3 символа", "err");
+  if (pass.length < 4)  return showMessage("Пароль минимум 4 символа", "err");
+
+  var users = getUsers();
+  if (users[login]) return showMessage("Такой логин уже занят", "err");
+
+  // Создаём пользователя с балансом и пустым портфелем
+  users[login] = {
+    pass: hashPassword(pass),
+    balance: START_BALANCE,
+    portfolio: {},   // { "Золото": 1.2345, ... }
+    history: [],     // { date, metal, op, grams, price }
+    created: new Date().toISOString()
+  };
+  saveUsers(users);
+  showMessage("✅ Регистрация успешна! Войдите.", "ok");
+  document.getElementById("loginUser").value = login;
+  document.getElementById("regUser").value = "";
+  document.getElementById("regPass").value = "";
+});
+
+// Вход
+document.getElementById("loginForm").addEventListener("submit", function(e) {
+  e.preventDefault();
+  var login = document.getElementById("loginUser").value.trim();
+  var pass  = document.getElementById("loginPass").value;
+
+  var users = getUsers();
+  if (!users[login]) return showMessage("Пользователь не найден", "err");
+  if (users[login].pass !== hashPassword(pass)) return showMessage("Неверный пароль", "err");
+
+  localStorage.setItem("ex_current", login);
+  showMessage("✅ Вход выполнен", "ok");
+  setTimeout(enterApp, 300);
+});
+
+// Выход
+document.getElementById("logoutBtn").addEventListener("click", function() {
+  localStorage.removeItem("ex_current");
+  location.reload();
+});
+
+/* ============================================================
+   2. ЗАГРУЗКА ДАННЫХ И ГРАФИКИ
+   ============================================================ */
+
+var METALS_DATA = null;   // сюда сохраним JSON
+var CHARTS = {};          // canvas -> Chart
+
+function enterApp() {
+  var login = currentUser();
+  if (!login) return;
+  document.getElementById("authScreen").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("userName").textContent = login;
+  updateHeader();
+  loadCharts();
+}
+
+function updateHeader() {
+  var u = getUserData();
+  if (!u) return;
+  document.getElementById("balanceVal").textContent = u.balance.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+}
+
+function loadCharts() {
+  fetch("metals_data.json")
+    .then(function(r) {
+      if (!r.ok) throw new Error("Файл не найден (HTTP " + r.status + ")");
+      return r.json();
+    })
+    .then(function(data) {
+      METALS_DATA = data;
+      document.getElementById("status").textContent = "Данные загружены";
+      renderGrid();
+      renderPortfolio();
+      renderHistory();
+    })
+    .catch(function(e) {
+      document.getElementById("status").textContent = "Ошибка загрузки данных: " + e.message;
+    });
+}
+
+function lastValueOf(values) {
+  for (var i = values.length - 1; i >= 0; i--) if (values[i] !== null) return values[i];
+  return null;
+}
+
+function renderGrid() {
+  var grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  CHARTS = {};
+  var data = METALS_DATA;
+  var user = getUserData();
+
+  for (var name in data.metals) {
+    var values = data.metals[name];
+    var last = lastValueOf(values);
+    var valid = values.filter(function(v) { return v !== null; });
+    var maxVal = Math.max.apply(null, valid);
+    var divisor = 1, suffix = "";
+    if (name !== "Алюминий" && maxVal >= 1000) { divisor = 1000; suffix = " тыс"; }
+
+    var lastText = "—";
+    if (last !== null) {
+      lastText = (last / divisor).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + suffix + " ₽/г";
+    }
+
+    // Карточка
+    var card = document.createElement("div");
+    card.className = "card";
+
+    var h = document.createElement("h3");
+    h.textContent = name;
+    card.appendChild(h);
+
+    var price = document.createElement("div");
+    price.className = "last-price";
+    price.textContent = lastText;
+    card.appendChild(price);
+
+    var canvas = document.createElement("canvas");
+    card.appendChild(canvas);
+
+    // Блок торговли
+    var trade = document.createElement("div");
+    trade.className = "trade-block";
+
+    var held = (user.portfolio && user.portfolio[name]) ? user.portfolio[name] : 0;
+    var holding = document.createElement("div");
+    holding.className = "holding";
+    holding.innerHTML = "В портфеле: <b>" + held.toFixed(4) + "</b> г";
+    holding.dataset.metal = name;
+    holding.dataset.role = "holding";
+    trade.appendChild(holding);
+
+    var row = document.createElement("div");
+    row.className = "trade-row";
+    var inp = document.createElement("input");
+    inp.type = "number";
+    inp.min = "0";
+    inp.step = "0.01";
+    inp.placeholder = "граммы";
+    inp.dataset.metal = name;
+    inp.dataset.role = "amount";
+    row.appendChild(inp);
+
+    var btnBuy = document.createElement("button");
+    btnBuy.className = "btn-buy";
+    btnBuy.textContent = "Купить";
+    btnBuy.addEventListener("click", function() { tradeOp(this, "buy"); });
+    row.appendChild(btnBuy);
+
+    var btnSell = document.createElement("button");
+    btnSell.className = "btn-sell";
+    btnSell.textContent = "Продать";
+    btnSell.addEventListener("click", function() { tradeOp(this, "sell"); });
+    row.appendChild(btnSell);
+
+    trade.appendChild(row);
+    card.appendChild(trade);
+    grid.appendChild(card);
+
+    // График
+    CHARTS[name] = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: name, data: values,
+          borderColor: "#60a5fa",
+          backgroundColor: "rgba(96,165,250,0.1)",
+          borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: true
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#94a3b8", maxTicksLimit: 5, font: { size: 9 } }, grid: { color: "#222" } },
+          y: {
+            ticks: {
+              color: "#94a3b8", font: { size: 9 },
+              callback: function(v) { return (v / divisor).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + suffix; }
+            },
+            grid: { color: "#222" }
+          }
+        }
+      }
+    });
+  }
+}
+
+/* ============================================================
+   3. ТОРГОВЛЯ
+   ============================================================ */
+
+function tradeOp(btn, op) {
+  var card = btn.closest(".card");
+  var inp  = card.querySelector("input[data-role='amount']");
+  var name = inp.dataset.metal;
+  var amount = parseFloat(inp.value);
+
+  if (!amount || amount <= 0) return showStatus("Введите количество грамм", "err");
+
+  var data = METALS_DATA;
+  var last = lastValueOf(data.metals[name]);
+  if (last === null) return showStatus("Нет актуальной цены", "err");
+
+  var user = getUserData();
+  var cost = amount * last;
+
+  if (op === "buy") {
+    if (cost > user.balance) return showStatus("Недостаточно средств. Нужно " + cost.toFixed(2) + " ₽", "err");
+    user.balance -= cost;
+    user.portfolio[name] = (user.portfolio[name] || 0) + amount;
+  } else {
+    var held = user.portfolio[name] || 0;
+    if (amount > held) return showStatus("Недостаточно металла. У вас " + held.toFixed(4) + " г", "err");
+    user.balance += cost;
+    user.portfolio[name] = held - amount;
+    if (user.portfolio[name] < 1e-9) delete user.portfolio[name];
+  }
+
+  user.history.unshift({
+    date: new Date().toISOString(),
+    metal: name, op: op, grams: amount, price: last, total: cost
+  });
+  if (user.history.length > 200) user.history.length = 200;
+
+  saveUserData(user);
+
+  // Обновляем UI
+  inp.value = "";
+  updateHeader();
+  updateHoldingLabel(name);
+  renderPortfolio();
+  renderHistory();
+  showStatus((op === "buy" ? "✅ Куплено " : "✅ Продано ") + amount.toFixed(4) + " г " + name, "ok");
+}
+
+function updateHoldingLabel(name) {
+  var user = getUserData();
+  var held = user.portfolio[name] || 0;
+  var label = document.querySelector("div[data-role='holding'][data-metal='" + CSS.escape(name) + "']");
+  if (label) label.innerHTML = "В портфеле: <b>" + held.toFixed(4) + "</b> г";
+}
+
+function showStatus(text, type) {
+  var el = document.getElementById("status");
+  el.textContent = text;
+  el.style.color = type === "err" ? "#f87171" : (type === "ok" ? "#4ade80" : "#94a3b8");
+  setTimeout(function() {
+    el.style.color = "#94a3b8";
+    el.textContent = "Данные загружены";
+  }, 3000);
+}
+
+/* ============================================================
+   4. ПОРТФЕЛЬ И ИСТОРИЯ
+   ============================================================ */
+
+function renderPortfolio() {
+  var user = getUserData();
+  var data = METALS_DATA;
+  var el = document.getElementById("portfolio");
+
+  var rows = [];
+  var totalValue = user.balance;
+  for (var name in user.portfolio) {
+    var grams = user.portfolio[name];
+    var price = lastValueOf(data.metals[name]) || 0;
+    var value = grams * price;
+    totalValue += value;
+    rows.push({ name: name, grams: grams, price: price, value: value });
+  }
+
+  if (rows.length === 0) {
+    el.innerHTML = "<p style='color:#94a3b8;margin:0'>Портфель пуст. Купите металлы на графиках выше.</p>";
+    return;
+  }
+
+  var html = "<table class='portfolio-table'><thead><tr><th>Металл</th><th>Грамм</th><th>Цена ₽/г</th><th>Стоимость ₽</th></tr></thead><tbody>";
+  rows.forEach(function(r) {
+    html += "<tr><td>" + r.name + "</td><td>" + r.grams.toFixed(4) +
+            "</td><td>" + r.price.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) +
+            "</td><td>" + r.value.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + "</td></tr>";
+  });
+  html += "</tbody></table>";
+  html += "<p style='margin:10px 0 0;font-size:13px;color:#94a3b8'>Итого портфель: <b style='color:#4ade80'>" +
+          totalValue.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽</b></p>";
+  el.innerHTML = html;
+}
+
+function renderHistory() {
+  var user = getUserData();
+  var el = document.getElementById("history");
+  if (!user.history || user.history.length === 0) {
+    el.innerHTML = "<p style='color:#94a3b8;margin:0'>Сделок пока нет.</p>";
+    return;
+  }
+  var html = "";
+  user.history.forEach(function(h) {
+    var d = new Date(h.date);
+    var dateStr = d.toLocaleDateString("ru-RU") + " " + d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    html += "<div class='history-item'>" +
+            "<span class='op " + h.op + "'>" + (h.op === "buy" ? "КУПИТЬ" : "ПРОДАТЬ") + "</span>" +
+            "<span>" + h.metal + " — " + h.grams.toFixed(4) + " г × " + h.price.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽</span>" +
+            "<span class='meta'>" + h.total.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽ · " + dateStr + "</span>" +
+            "</div>";
+  });
+  el.innerHTML = html;
+}
+
+/* ============================================================
+   5. АВТОВХОД
+   ============================================================ */
+if (currentUser()) enterApp();
+</script>
+</body>
+</html>
